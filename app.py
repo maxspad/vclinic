@@ -510,7 +510,7 @@ clinic_manager_agent = Agent(
 # If this is the first time this is being run, set up the conversation history
 if 'history' not in st.session_state:
     st.session_state['history'] = [('ai',
-        asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write a brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message.', context=start_context)).final_output
+        asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write very brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message. Give the user a suggestion where to start.', context=start_context)).final_output
     )]
 # Likewise set up the context
 if 'context' not in st.session_state:
