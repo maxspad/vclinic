@@ -134,8 +134,119 @@ alice = Patient(facesheet=FaceSheet(
               visible_to_user=True)
     ])
             
+# --- New Patient 1: 34-year-old female trying to conceive ---
+julia_id = 'julia_nguyen'
+julia = Patient(
+    facesheet=FaceSheet(
+        id=julia_id,
+        name_first='Julia',
+        name_last='Nguyen',
+        age=34,
+        sex='female',
+        problems=['trying_to_conceive'],
+        medications=[]
+    ),
+    backstory='34-year-old software designer actively trying to get pregnant over the last 3 months.',
+    events=[
+        Event(
+            simulation_week=0,
+            event_type='patient_visit',
+            subject='Preconception Counseling',
+            short_description='Discussed cycle tracking and lifestyle factors; plan for prenatal vitamins.',
+            created_by='system',
+            visible_to_patient=True,
+            visible_to_user=True
+        ),
+        Event(
+            simulation_week=0,
+            event_type='order_placed',
+            subject='Prenatal Vitamin Rx',
+            short_description='Started daily prenatal vitamin with folic acid.',
+            content='Prenatal vitamin PO daily with 0.4–0.8 mg folic acid.',
+            created_by='system',
+            visible_to_patient=True,
+            visible_to_user=True
+        ),
+        Event(
+            simulation_week=1,
+            event_type='study_result',
+            subject='Serum β-hCG Result',
+            short_description='Negative pregnancy test after a late period.',
+            content='Serum β-hCG: <5 mIU/mL (negative). Testing done because of period 4 days late.',
+            created_by='system',
+            visible_to_patient=False,
+            visible_to_user=True
+        )
+    ]
+)
 
-start_context = Context(current_week=1, patients={bob_id : bob, alice_id : alice})
+# --- New Patient 2: 23-year-old male with illness anxiety disorder ---
+liam_id = 'liam_roberts'
+liam = Patient(
+    facesheet=FaceSheet(
+        id=liam_id,
+        name_first='Liam',
+        name_last='Roberts',
+        age=23,
+        sex='male',
+        problems=['illness_anxiety_disorder'],
+        medications=[]
+    ),
+    backstory='23-year-old graduate student with a history of frequent online health searches and reassurance seeking.',
+    events=[
+        Event(
+            simulation_week=0,
+            event_type='message_from_patient',
+            subject='Worried About Chest Sensations',
+            short_description='Reports intermittent chest “twinges” after reading about heart disease.',
+            content='Hi—should I be worried about quick chest twinges I felt after studying late? It lasted a second.',
+            created_by='system',
+            visible_to_patient=True,
+            visible_to_user=True
+        ),
+        Event(
+            simulation_week=0,
+            event_type='patient_visit',
+            subject='Evaluation of Chest Discomfort',
+            short_description='Clinic visit for reassurance and assessment; benign exam.',
+            created_by='system',
+            visible_to_patient=True,
+            visible_to_user=True
+        ),
+        Event(
+            simulation_week=0,
+            event_type='order_placed',
+            subject='ECG',
+            short_description='Baseline ECG ordered during visit.',
+            content='12-lead ECG ordered as baseline during visit for chest sensations.',
+            created_by='system',
+            visible_to_patient=True,
+            visible_to_user=True
+        ),
+        Event(
+            simulation_week=1,
+            event_type='message_from_patient',
+            subject='New Symptom Concern',
+            short_description='Asks about a mole after reading about melanoma.',
+            content='Hello again—should I be concerned about a small mole on my shoulder I just noticed?',
+            created_by='system',
+            visible_to_patient=True,
+            visible_to_user=True
+        )
+    ]
+)
+
+# --- Add to simulation context ---
+start_context = Context(
+    current_week=1,
+    patients={
+        bob_id: bob,
+        alice_id: alice,
+        julia_id: julia,
+        liam_id: liam,
+    }
+)
+
 
 @function_tool
 def get_patients_summary(wrapper : RunContextWrapper[Context]) -> list[FaceSheet]:
@@ -372,8 +483,8 @@ summarizer_agent = Agent(
 
 clinic_manager_agent_instructions = (
 '''You are the clinic manager. You are a wise and experienced RN. You are professional always, but not above the very occasional banter (though you don't talk about your lighter side)
-You are the main user interface for the physician managing a longitudinal continuity clinic. 
-You try to use bullet points when appropriate to keep things clear and concise. 
+You are the main user interface for the physician managing a longitudinal continuity clinic.
+You try to use bullet points when appropriate to keep things clear and concise. Use bolding, italicizing, underlining, etc in order to make the information clear and easy to read.
 
 Your job is to respond to the user requests as best as possible, using the tools and context available to you. 
 Make sure to let the user know that when they are finished with the clinic day, they can let you know in order to progress forward in time. 
@@ -399,7 +510,7 @@ clinic_manager_agent = Agent(
 # If this is the first time this is being run, set up the conversation history
 if 'history' not in st.session_state:
     st.session_state['history'] = [('ai',
-        asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write a brief overview of your cababilities.', context=start_context)).final_output
+        asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write a brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message.', context=start_context)).final_output
     )]
 # Likewise set up the context
 if 'context' not in st.session_state:
