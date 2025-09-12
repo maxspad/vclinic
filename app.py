@@ -535,7 +535,7 @@ if 'event_log' not in st.session_state:
         # Display the conversation history
 st.header('🥼 Virtual Longitudinal Clinic')
 st.caption('Using AI agents to drive a long-term, dynamic simulation of patient care.')
-chat_tab, event_log_tab, help_tab = st.tabs(['Chat', 'Event Log', 'Help'])
+chat_tab, event_log_tab, help_tab = st.tabs(['💬 Chat', '📋 Event Log', '❔ Help'])
 with chat_tab:
     with st.container(height=500):
         for role, message in st.session_state['history']:
@@ -598,6 +598,7 @@ examine their histories, correspond with them via portal messages, and prescribe
 an AI agent will use your actions and the patient's histories and progress the simulation, creating new encounters, problems, and emergent behavior over time
 
 In this relatively simple example, there are only a few patients. However, it serves as a proof of concept to show how dynamic agent-based simulations can run semi-autonomously. 
+**Make sure to check the Event Log to see how the simulation unfolds!**
 
 If you have questions, reach out to maxspad@med.umich.edu. Thanks!'''
 )
