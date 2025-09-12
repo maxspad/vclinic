@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field
 from rich import print
 from typing import Literal, Optional
 from openai import AzureOpenAI, AsyncAzureOpenAI
-from agents import RunContextWrapper, set_default_openai_api, set_default_openai_client, Agent, Runner, set_tracing_disabled, function_tool, handoff, set_tracing_export_api_key
+from openai.types.shared import Reasoning
+from agents import ModelSettings, RunContextWrapper, set_default_openai_api, set_default_openai_client, Agent, Runner, set_tracing_disabled, function_tool, handoff, set_tracing_export_api_key
 from dotenv import load_dotenv
 import os
 import asyncio
@@ -189,6 +190,7 @@ def send_patient_a_message(wrapper : RunContextWrapper[Context], patient_id: str
     patient.events.append(new_message)
     toret = f'Message sent to {patient.facesheet.name_first} {patient.facesheet.name_last}: "{message}"'
     print(toret)
+    st.session_state['event_log'].append(toret)
     return toret
 
 @function_tool
@@ -211,6 +213,7 @@ def get_new_results_for_patient(wrapper : RunContextWrapper[Context], patient_id
 
     toret = '\n'.join([f'{event.subject}: "{event.content}"' for event in events])
     print(toret)
+    # st.session_state['event_log'].append(toret)
     return toret
 
 @function_tool
@@ -234,6 +237,7 @@ def place_order_for_patient(wrapper : RunContextWrapper[Context], patient_id : s
                       created_by='user', visible_to_patient=True, visible_to_user=True)
     patient.events.append(new_order)
     toret = f'Order placed for patient {patient.facesheet.name_first} {patient.facesheet.name_last}: "{order_description}"'
+    st.session_state['event_log'].append(toret)
     print(toret)
     return toret
 
@@ -251,7 +255,8 @@ def patient_progression_add_event(wrapper : RunContextWrapper[Context], patient_
         return toret
 
     patient.events.append(event)
-    toret = f'Event added to patient {patient.facesheet.name_first} {patient.facesheet.name_last}: "{event.content}"'
+    toret = f'{patient.facesheet.name_first} {patient.facesheet.name_last}: "{event.content}"'
+    st.session_state['event_log'].append(toret)
     print(toret)
     return toret
 
@@ -279,7 +284,8 @@ You must keep keep the simulation engaging and educational, but not overwhelming
 patient_progression_agent = Agent(
     name='Patient Simulation Progression Agent',
     instructions=patient_progression_agent_instructions,
-    tools=[patient_progression_add_event]
+    tools=[patient_progression_add_event],
+    # model_settings=ModelSettings(reasoning=Reasoning(effort='high'), verbosity='medium')
 )
 
 @function_tool
@@ -346,82 +352,82 @@ summarizer_agent = Agent(
 
 
 clinic_manager_agent_instructions = (
-'''You are the clinic manager. You are a wise and experienced RN. You are professional always.
+'''You are the clinic manager. You are a wise and experienced RN. You are professional always. You prefer to use bullet points when appropriate to keep things clear and concise.
 You are the main user interface for the physician managing a longitudinal continuity clinic. 
-Your job is to respond to the user requests as best as possible, using the tools and context available to you. 
-You are helpful, but you don\'t suggest any specific medical information. '''
 
-# If the user requests to end the clinic day,
-# first generate a summary of their actions to this point. ALWAYS confirm that the user does not want to go back and make any more changes, and warn 
-# them that if they end the day, they won't be able to go back. If they confirm, end the day. 
-# '''
+Your job is to respond to the user requests as best as possible, using the tools and context available to you. 
+Make sure to let the user know that when they are finished with the clinic day, they can let you know in order to progress forward in time. 
+You are helpful, but you don\'t suggest any specific medical information.
+
+If the user requests to end the clinic day,
+first generate a summary of their actions to this point. ALWAYS confirm that the user does not want to go back and make any more changes, and warn 
+them that if they end the day, they won't be able to go back. If they confirm, end the day. 
+'''
 )
 clinic_manager_agent = Agent(
     'Clinic Manager',
     tools=[get_patients_summary, get_new_messages_for_patient, send_patient_a_message, 
            get_new_results_for_patient, place_order_for_patient, end_clinic_day],  
     instructions=clinic_manager_agent_instructions,
-    handoffs=[summarizer_agent]
+    handoffs=[summarizer_agent],
+    # model_settings=ModelSettings(reasoning=Reasoning(effort='low'), verbosity='medium')
     # handoffs=[handoff_obj_medical_coder_agent]
 )
 
-
-
 # If this is the first time this is being run, set up the conversation history
 if 'history' not in st.session_state:
-    st.session_state['history'] = [('ai', 'Hello Doctor, I am your clinic manager!')]
+    st.session_state['history'] = [('ai',
+        asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write a brief overview of your cababilities.', context=start_context)).final_output
+    )]
 # Likewise set up the context
 if 'context' not in st.session_state:
     st.session_state['context'] = start_context
 # And the ChatGPT agent conversation history
 if 'agent_history' not in st.session_state:
     st.session_state['agent_history'] = []
+if 'event_log' not in st.session_state:
+    st.session_state['event_log'] = []
+c1, c2 = st.columns(2)
 
-# c1, c2 = st.columns([3,1])
-summary_response = ''
+with c2:
+    st.header(f'Week {st.session_state["context"].current_week}')
+    to_write = '\n'.join([f'- {ev}' for ev in st.session_state['event_log']])
+    print(to_write)
+    st.markdown(to_write)
+    # st.write(st.session_state['event_log'])
 
-st.write(f'Week: {st.session_state["context"].current_week}')
-# Display the conversation history
-for role, message in st.session_state['history']:
-    with st.chat_message(name=role):
-        st.write(message)
-user_placeholder_for_current_turn = st.empty()
-ai_placeholder_for_current_turn = st.empty()
-user_input = st.chat_input()
-current_week = st.session_state['context'].current_week
+with c1:
+    with st.container(height=600):
+        # Display the conversation history
+        for role, message in st.session_state['history']:
+            with st.chat_message(name=role):
+                st.write(message)
+        user_placeholder_for_current_turn = st.empty()
+        ai_placeholder_for_current_turn = st.empty()
+        user_input = st.chat_input()
+        current_week = st.session_state['context'].current_week
 
-if user_input: # if the user has typed something in 
-    # Echo the user's input
-    with user_placeholder_for_current_turn:
-        with st.chat_message(name='user'):
-            st.write(user_input)
-    # Store it in the session output
-    st.session_state['history'].append(('user', user_input))
+        if user_input: # if the user has typed something in 
+            # Echo the user's input
+            with user_placeholder_for_current_turn:
+                with st.chat_message(name='user'):
+                    st.write(user_input)
+            # Store it in the session output
+            st.session_state['history'].append(('user', user_input))
 
-    # Get a response
-    response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
-    with ai_placeholder_for_current_turn:
-        with st.chat_message(name='ai'):
-            st.write(response.final_output)
-        st.session_state['history'].append(('ai', response.final_output))
+            # Get a response
+            response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
+            with ai_placeholder_for_current_turn:
+                with st.chat_message(name='ai'):
+                    st.write(response.final_output)
+                st.session_state['history'].append(('ai', response.final_output))
 
-    # Add it to the agent's conversation history
-    st.session_state['agent_history'] += (response.to_input_list())
+            # Add it to the agent's conversation history
+            st.session_state['agent_history'] += (response.to_input_list())
 
-    # Check if the user ended the day
-    if st.session_state['context'].current_week != current_week:
-        del st.session_state['agent_history']
-        del st.session_state['history']
-        st.balloons()
-        st.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
-
-
-
-# with c2:
-#      # Summarize the actions taken to this point
-#     summary_response = asyncio.run(Runner.run(summarizer_agent, st.session_state['agent_history'], context=st.session_state['context'])).final_output
-#     st.markdown('## Clinic Day Summary')
-#     st.write(summary_response)
-
-with st.sidebar:
-    st.write(st.session_state['context'].model_dump())
+            # Check if the user ended the day
+            if st.session_state['context'].current_week != current_week:
+                del st.session_state['agent_history']
+                del st.session_state['history']
+                st.balloons()
+                st.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
