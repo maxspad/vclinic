@@ -145,8 +145,16 @@ def get_patients_summary(wrapper : RunContextWrapper[Context]) -> list[FaceSheet
 
 
 @function_tool
-def get_new_messages_for_patient(wrapper : RunContextWrapper[Context], patient_id : str) -> str:
-    '''Gets the list of messages sent from/to the doctor from a given patient on this simulation week'''
+def get_messages_for_patient(wrapper : RunContextWrapper[Context], patient_id : str, new_only : bool = True) -> str:
+    '''Gets the list of messages sent from/to the doctor from a given patient on this simulation week
+
+    Args:
+        patient_id: The string id of the patient to get messages for
+        new_only: If True, only returns messages from the current simulation week. If False, returns all messages.
+
+    Returns:
+        A string containing the list of messages.
+    '''
     print('get_messages_for_patient')
 
     patient = wrapper.context.patients.get(patient_id)
@@ -156,7 +164,9 @@ def get_new_messages_for_patient(wrapper : RunContextWrapper[Context], patient_i
         return toret
     
     # If we found the patient, filter the patient's events only to "message_from_patient" or "message_to_patient"
-    events = [event for event in patient.events if event.event_type in ['message_from_patient', 'message_to_patient'] and event.simulation_week == wrapper.context.current_week]
+    events = [event for event in patient.events if event.event_type in ['message_from_patient', 'message_to_patient']]
+    if new_only:
+        events = [event for event in events if event.simulation_week == wrapper.context.current_week]
     if not events or not len(events):
         toret = f'No messages found for patient {patient.facesheet.name_first} {patient.facesheet.name_last}'
         print(toret)
@@ -194,8 +204,15 @@ def send_patient_a_message(wrapper : RunContextWrapper[Context], patient_id: str
     return toret
 
 @function_tool
-def get_new_results_for_patient(wrapper : RunContextWrapper[Context], patient_id : str) -> str:
-    '''Gets the list of new study results for a given patient on this simulation week'''
+def get_results_for_patient(wrapper : RunContextWrapper[Context], patient_id : str, new_only : bool = True) -> str:
+    '''Gets the list of new study results for a given patient on this simulation week. 
+    
+    Args:
+        new_only: If True, only returns results from the current simulation week. If False, returns all results.
+
+    Returns:
+        A string containing the list of study results.
+    '''
     print('get_new_results_for_patient')
 
     patient = wrapper.context.patients.get(patient_id)
@@ -205,7 +222,9 @@ def get_new_results_for_patient(wrapper : RunContextWrapper[Context], patient_id
         return toret
     
     # If we found the patient, filter the patient's events only to "study_result"
-    events = [event for event in patient.events if event.event_type == 'study_result' and event.simulation_week == wrapper.context.current_week]
+    events = [event for event in patient.events if event.event_type == 'study_result']
+    if new_only:
+        events = [event for event in events if event.simulation_week == wrapper.context.current_week]
     if not events or not len(events):
         toret = f'No new study results found for patient {patient.facesheet.name_first} {patient.facesheet.name_last}'
         print(toret)
@@ -352,8 +371,9 @@ summarizer_agent = Agent(
 
 
 clinic_manager_agent_instructions = (
-'''You are the clinic manager. You are a wise and experienced RN. You are professional always. You prefer to use bullet points when appropriate to keep things clear and concise.
+'''You are the clinic manager. You are a wise and experienced RN. You are professional always, but not above the very occasional banter (though you don't talk about your lighter side)
 You are the main user interface for the physician managing a longitudinal continuity clinic. 
+You try to use bullet points when appropriate to keep things clear and concise. 
 
 Your job is to respond to the user requests as best as possible, using the tools and context available to you. 
 Make sure to let the user know that when they are finished with the clinic day, they can let you know in order to progress forward in time. 
@@ -362,12 +382,14 @@ You are helpful, but you don\'t suggest any specific medical information.
 If the user requests to end the clinic day,
 first generate a summary of their actions to this point. ALWAYS confirm that the user does not want to go back and make any more changes, and warn 
 them that if they end the day, they won't be able to go back. If they confirm, end the day. 
+
+If the user requests to see messages or results, offer them the newest ones first, but remind them they can ask for all messages or results.
 '''
 )
 clinic_manager_agent = Agent(
     'Clinic Manager',
-    tools=[get_patients_summary, get_new_messages_for_patient, send_patient_a_message, 
-           get_new_results_for_patient, place_order_for_patient, end_clinic_day],  
+    tools=[get_patients_summary, get_messages_for_patient, send_patient_a_message, 
+           get_results_for_patient, place_order_for_patient, end_clinic_day],  
     instructions=clinic_manager_agent_instructions,
     handoffs=[summarizer_agent],
     # model_settings=ModelSettings(reasoning=Reasoning(effort='low'), verbosity='medium')
@@ -387,23 +409,30 @@ if 'agent_history' not in st.session_state:
     st.session_state['agent_history'] = []
 if 'event_log' not in st.session_state:
     st.session_state['event_log'] = []
-c1, c2 = st.columns(2)
 
-with c2:
-    st.header(f'Week {st.session_state["context"].current_week}')
-    to_write = '\n'.join([f'- {ev}' for ev in st.session_state['event_log']])
-    print(to_write)
-    st.markdown(to_write)
-    # st.write(st.session_state['event_log'])
+# c1, c2 = st.columns(2)
 
-with c1:
-    with st.container(height=600):
+# with c2:
+# st.header(f'Week {st.session_state["context"].current_week}')
+# to_write = '\n'.join([f'- {ev}' for ev in st.session_state['event_log']])
+# print(to_write)
+# st.markdown(to_write)
+# # st.write(st.session_state['event_log'])
+
+# with c1:
+#     with st.container(height=600):
         # Display the conversation history
+st.header('🥼 Virtual Longitudinal Clinic')
+chat_tab, event_log_tab, help_tab = st.tabs(['Chat', 'Event Log', 'Help'])
+with chat_tab:
+    with st.container(height=500):
         for role, message in st.session_state['history']:
             with st.chat_message(name=role):
+                st.caption(f'{"Clinic Manager" if role == "ai" else "User"} - Week {st.session_state["context"].current_week}')
                 st.write(message)
         user_placeholder_for_current_turn = st.empty()
         ai_placeholder_for_current_turn = st.empty()
+        end_of_day_placeholder = st.empty()
         user_input = st.chat_input()
         current_week = st.session_state['context'].current_week
 
@@ -430,4 +459,21 @@ with c1:
                 del st.session_state['agent_history']
                 del st.session_state['history']
                 st.balloons()
-                st.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
+                end_of_day_placeholder.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
+
+with event_log_tab:
+    st.caption('This helps you understand what the simulation is doing, so you can peek behind the scenes. It keeps track of all of the events initiated by the system and the user. ')
+    
+    for patient in st.session_state['context'].patients.values():
+        st.subheader(f'Patient: {patient.facesheet.name_first} {patient.facesheet.name_last}')
+        for event in patient.events:
+                badge_col, text_col = st.columns([1,15])
+                with badge_col:
+                    if event.created_by == 'user':
+                        st.badge('User', color='green')
+                    else:
+                        st.badge('AI', color='blue')
+                with text_col:
+                    st.write(f'Week {event.simulation_week}: {event.subject}')
+                    if event.content:
+                        st.write(f'- {event.content}')
