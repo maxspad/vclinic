@@ -10,9 +10,13 @@ import os
 import asyncio
 
 # Load environment variables
-load_dotenv()
-print(os.getenv('AZURE_OPENAI_DEPLOYMENT'))
-
+# load_dotenv()
+print("AZURE_OPENAI_API_KEY:", os.getenv("AZURE_OPENAI_API_KEY"))
+print("AZURE_OPENAI_API_VERSION:", os.getenv("AZURE_OPENAI_API_VERSION"))
+print("AZURE_OPENAI_ENDPOINT:", os.getenv("AZURE_OPENAI_ENDPOINT"))
+print("AZURE_OPENAI_DEPLOYMENT:", os.getenv("AZURE_OPENAI_DEPLOYMENT"))
+print("AZURE_OPENAI_ORG_ID:", os.getenv("AZURE_OPENAI_ORG_ID"))
+print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
 # Create OpenAI client using Azure OpenAI
 openai_client = AsyncAzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
@@ -23,7 +27,7 @@ openai_client = AsyncAzureOpenAI(
 )
 set_tracing_export_api_key(os.getenv("OPENAI_API_KEY"))
 set_default_openai_client(openai_client, use_for_tracing=False)
-# set_default_openai_api('chat_completions')
+set_default_openai_api('chat_completions')
 set_tracing_disabled(disabled=False)
 
 class Actor(BaseModel):
