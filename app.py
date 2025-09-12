@@ -11,6 +11,7 @@ import asyncio
 
 # Load environment variables
 load_dotenv()
+print(os.getenv('AZURE_OPENAI_DEPLOYMENT'))
 
 # Create OpenAI client using Azure OpenAI
 openai_client = AsyncAzureOpenAI(
@@ -22,7 +23,7 @@ openai_client = AsyncAzureOpenAI(
 )
 set_tracing_export_api_key(os.getenv("OPENAI_API_KEY"))
 set_default_openai_client(openai_client, use_for_tracing=False)
-set_default_openai_api('chat_completions')
+# set_default_openai_api('chat_completions')
 set_tracing_disabled(disabled=False)
 
 class Actor(BaseModel):
@@ -34,26 +35,11 @@ class Message(BaseModel):
     sender : Literal['patient','doctor']
     is_read : bool = False
 
-class Encounter(BaseModel):
-    time : int
-    subject : str = Field(description='The main subject or title of the encounter, just a few words, like "Refill Request" or "Health Maintenance Visit"')
-    short_description : Optional[str] = Field(None, description='A short, one sentence or less summary of the event')
-    long_description : Optional[str] = Field(None, description='A longer, more detailed summary of the event, about one paragraph')
-    message_history : list[Message] = []
-    initiated_by : Literal['user','system']
-    currently_open : bool = Field(False, description='Whether this encounter has been fully addressed or not.')
-
-class Conversation(BaseModel):
-    id : UUID = Field(default_factory=uuid4)
-    participants : list[UUID]
-    messages : list[Message] = []
-
 class Event(BaseModel):
     simulation_week : int = Field(description='When the event happened in simulated weeks')
     event_type : Literal['order_placed','patient_visit','message_from_patient','message_to_patient','patient_status_change','study_result']
     subject : str = Field(..., description='The main subject or title of the event, just a few words')
     short_description : Optional[str] = Field(None, description='A short, one sentence or less summary of the event')
-    long_description : Optional[str] = Field(None, description='A longer, more detailed summary of the event, about one paragraph')
     content : Optional[str] = Field(None, description='The full text content of the event, such as the full text of a message or order')
     created_by : Literal['user','system'] = Field(description='Whether this event was created by the user (the user choosing to place an order/send a script or send a message) or whether it was created by the simulation manager')
     visible_to_patient : bool = Field(description='Whether or not this event is known to the patient yet')
@@ -88,8 +74,8 @@ bob = Patient(facesheet=FaceSheet(id=bob_id,
                 age=86,
                 sex='male',
                 problems=['htn','hld'], 
-                medications=['lisinopril']),
-            backstory='A crochety 86 year old trumper',
+                medications=['lisinopril 20mg BID']),
+            backstory='A crochety 86 year old',
             events=[
                 Event(simulation_week=0, event_type='message_from_patient', subject='Establishing Care',
                       short_description='Bob was told he needed a PCP and so he messaged acting for an appointment',
@@ -145,13 +131,6 @@ alice = Patient(facesheet=FaceSheet(
             
 
 start_context = Context(current_week=1, patients={bob_id : bob, alice_id : alice})
-
-# @function_tool
-# def get_patient_info(wrapper : RunContextWrapper[Context]) -> list[Patient]:
-#     '''Gets the current list of patients and their medical record info'''
-#     print(f'get_patient_info')
-
-#     return wrapper.context.patients
 
 @function_tool
 def get_patients_summary(wrapper : RunContextWrapper[Context]) -> list[FaceSheet]:
@@ -279,7 +258,7 @@ You receive two items as input:
 - A current_week integer: This is the current time of the simulation. 
 - A patient record: This is a nested data structure containing patient demographics, problem lists, medication lists, and, most importantly, *events*.
 Your job is to progress the patient forward in time, based on their CURRENT problems, medications, and previous events. You do NOT provide any of your 
-own care. If a patient hasn't been adequately treated for something, it is NOT your job to correct the mistake. You PREDICT what happends *as a result of* the mistake.
+own care. If a patient hasn't been adequately treated for something, it is NOT your job to correct the mistake. You PREDICT what happends *as a result of* any mistake (or correct treatment). 
 
 To do so, you think step-by-step:
 - First, you analyze the patient's current status and history, including their previous events
@@ -364,7 +343,7 @@ summarizer_agent = Agent(
 
 clinic_manager_agent_instructions = (
 '''You are the clinic manager. You are a wise and experienced RN. You are professional always.
-You are the main user interface for a longitudinal continuity clinic for medical students. 
+You are the main user interface for the physician managing a longitudinal continuity clinic. 
 Your job is to respond to the user requests as best as possible, using the tools and context available to you. 
 You are helpful, but you don\'t suggest any specific medical information. '''
 
@@ -393,12 +372,11 @@ if 'context' not in st.session_state:
 # And the ChatGPT agent conversation history
 if 'agent_history' not in st.session_state:
     st.session_state['agent_history'] = []
-if 'day_ended' not in st.session_state:
-    st.session_state['day_ended'] = False 
 
 # c1, c2 = st.columns([3,1])
 summary_response = ''
 
+st.write(f'Week: {st.session_state["context"].current_week}')
 # Display the conversation history
 for role, message in st.session_state['history']:
     with st.chat_message(name=role):
@@ -406,6 +384,8 @@ for role, message in st.session_state['history']:
 user_placeholder_for_current_turn = st.empty()
 ai_placeholder_for_current_turn = st.empty()
 user_input = st.chat_input()
+current_week = st.session_state['context'].current_week
+
 if user_input: # if the user has typed something in 
     # Echo the user's input
     with user_placeholder_for_current_turn:
@@ -425,9 +405,12 @@ if user_input: # if the user has typed something in
     st.session_state['agent_history'] += (response.to_input_list())
 
     # Check if the user ended the day
-    if st.session_state['day_ended']:
-        st.success('The clinic day has ended. Please restart the app to begin a new day!')
+    if st.session_state['context'].current_week != current_week:
+        del st.session_state['agent_history']
+        del st.session_state['history']
         st.balloons()
+        st.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
+
 
 
 # with c2:
