@@ -533,7 +533,7 @@ if 'event_log' not in st.session_state:
 # with c1:
 #     with st.container(height=600):
         # Display the conversation history
-st.header('🥼 Virtual Longitudinal Clinic')
+st.subheader('🥼 Virtual Clinic')
 st.caption('Using AI agents to drive a long-term, dynamic simulation of patient care.')
 chat_tab, event_log_tab, help_tab = st.tabs(['💬 Chat', '📋 Event Log', '❔ Help'])
 with chat_tab:
