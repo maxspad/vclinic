@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from rich import print
 from typing import Literal, Optional
 from openai import AzureOpenAI, AsyncAzureOpenAI
-from agents import RunContextWrapper, set_default_openai_api, set_default_openai_client, Agent, Runner, set_tracing_disabled, function_tool, handoff
+from agents import RunContextWrapper, set_default_openai_api, set_default_openai_client, Agent, Runner, set_tracing_disabled, function_tool, handoff, set_tracing_export_api_key
 from dotenv import load_dotenv
 import os
 import asyncio
@@ -20,10 +20,10 @@ openai_client = AsyncAzureOpenAI(
     azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
     organization=os.getenv("AZURE_OPENAI_ORG_ID")
 )
-
+set_tracing_export_api_key(os.getenv("OPENAI_API_KEY"))
 set_default_openai_client(openai_client, use_for_tracing=False)
 set_default_openai_api('chat_completions')
-# set_tracing_disabled(disabled=True)
+set_tracing_disabled(disabled=False)
 
 class Actor(BaseModel):
     pass
@@ -174,7 +174,7 @@ def get_new_messages_for_patient(wrapper : RunContextWrapper[Context], patient_i
     # If we found the patient, filter the patient's events only to "message_from_patient" or "message_to_patient"
     events = [event for event in patient.events if event.event_type in ['message_from_patient', 'message_to_patient'] and event.tick == wrapper.context.current_tick]
     if not events or not len(events):
-        toret = f'No messages found for patient {patient.name_first} {patient.name_last}'
+        toret = f'No messages found for patient {patient.facesheet.name_first} {patient.facesheet.name_last}'
         print(toret)
         return toret
 
@@ -222,7 +222,7 @@ def get_new_results_for_patient(wrapper : RunContextWrapper[Context], patient_id
     # If we found the patient, filter the patient's events only to "study_result"
     events = [event for event in patient.events if event.event_type == 'study_result' and event.tick == wrapper.context.current_tick]
     if not events or not len(events):
-        toret = f'No new study results found for patient {patient.name_first} {patient.name_last}'
+        toret = f'No new study results found for patient {patient.facesheet.name_first} {patient.facesheet.name_last}'
         print(toret)
         return toret
 
@@ -277,6 +277,35 @@ def place_order_for_patient(wrapper : RunContextWrapper[Context], patient_id : s
 #                                           tool_description_override=medical_coder_agent_tool_description,
 #                                           on_handoff=medical_coder_agent_callback)
 
+summarizer_agent_instructions = (
+'''You are a medical chart abstractor.
+You are given a conversation between a physician and his/her AI clinic manager. Your job is to extract the clinically relevant action points from their 
+conversation. Focus on creating succinct, clear, almost terse summaries. You should use bullet points whenever able. 
+
+Focus ONLY on any patient messages sent, results reviewed, or orders placed. Organize your summary and 
+format it using markdown as follows:
+
+**Messages Sent**
+
+- Message 1
+- Message 2
+
+**Results Reviewed**
+
+- Result 1
+- Result 2
+
+**Orders Placed**
+
+- Order 1
+- Order 2
+'''
+)
+summarizer_agent = Agent(
+    'Summarizer',
+    instructions=summarizer_agent_instructions
+)
+
 
 clinic_manager_agent_instructions = (
 '''You are the clinic manager. You are a wise and experienced RN. You are professional always.
@@ -287,6 +316,7 @@ clinic_manager_agent = Agent(
     'Clinic Manager',
     tools=[get_patients_summary, get_new_messages_for_patient, send_patient_a_message, get_new_results_for_patient, place_order_for_patient],  
     instructions=clinic_manager_agent_instructions,
+    handoffs=[summarizer_agent]
     # handoffs=[handoff_obj_medical_coder_agent]
 )
 
@@ -302,32 +332,40 @@ if 'context' not in st.session_state:
 if 'agent_history' not in st.session_state:
     st.session_state['agent_history'] = []
 
-
-c1, c2 = st.columns(2)
-
-with c2:
-    # Display the current context for debugging
-    st.write(st.session_state['context'].model_dump())
+# c1, c2 = st.columns([3,1])
+summary_response = ''
 
 # Display the conversation history
 for role, message in st.session_state['history']:
-    with c1.chat_message(name=role):
+    with st.chat_message(name=role):
         st.write(message)
-
-user_input = c1.chat_input()
+user_placeholder_for_current_turn = st.empty()
+ai_placeholder_for_current_turn = st.empty()
+user_input = st.chat_input()
 if user_input: # if the user has typed something in 
     # Echo the user's input
-    with c1.chat_message(name='user'):
-        st.write(user_input)
+    with user_placeholder_for_current_turn:
+        with st.chat_message(name='user'):
+            st.write(user_input)
     # Store it in the session output
     st.session_state['history'].append(('user', user_input))
 
     # Get a response
     response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
-
-    with c1.chat_message(name='ai'):
-        st.write(response.final_output)
-    st.session_state['history'].append(('ai', response.final_output))
+    with ai_placeholder_for_current_turn:
+        with st.chat_message(name='ai'):
+            st.write(response.final_output)
+        st.session_state['history'].append(('ai', response.final_output))
 
     # Add it to the agent's conversation history
     st.session_state['agent_history'] += (response.to_input_list())
+
+
+# with c2:
+#      # Summarize the actions taken to this point
+#     summary_response = asyncio.run(Runner.run(summarizer_agent, st.session_state['agent_history'], context=st.session_state['context'])).final_output
+#     st.markdown('## Clinic Day Summary')
+#     st.write(summary_response)
+
+with st.sidebar:
+    st.write(st.session_state['context'].model_dump())
