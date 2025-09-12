@@ -508,16 +508,16 @@ clinic_manager_agent = Agent(
 )
 
 # If this is the first time this is being run, set up the conversation history
+if 'agent_history' not in st.session_state:
+    st.session_state['agent_history'] = []
 if 'history' not in st.session_state:
-    st.session_state['history'] = [('ai',
-        asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write very brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message. Give the user a suggestion where to start.', context=start_context)).final_output
-    )]
+    intro_result = asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write very brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message. Give the user a suggestion where to start.', context=start_context))
+    st.session_state['agent_history'] += intro_result.to_input_list()
+    st.session_state['history'] = [('ai', intro_result.final_output)]
 # Likewise set up the context
 if 'context' not in st.session_state:
     st.session_state['context'] = start_context
 # And the ChatGPT agent conversation history
-if 'agent_history' not in st.session_state:
-    st.session_state['agent_history'] = []
 if 'event_log' not in st.session_state:
     st.session_state['event_log'] = []
 
