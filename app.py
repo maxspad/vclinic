@@ -49,7 +49,7 @@ class Conversation(BaseModel):
     messages : list[Message] = []
 
 class Event(BaseModel):
-    tick : int = Field(description='When the event happened in simulation ticks')
+    simulation_week : int = Field(description='When the event happened in simulated weeks')
     event_type : Literal['order_placed','patient_visit','message_from_patient','message_to_patient','patient_status_change','study_result']
     subject : str = Field(..., description='The main subject or title of the event, just a few words')
     short_description : Optional[str] = Field(None, description='A short, one sentence or less summary of the event')
@@ -77,11 +77,11 @@ class User(Actor):
     name : str = 'Doctor'
 
 class Context(BaseModel):
-    current_tick : int
+    current_week : int
     user : User = Field(User(name='Doctor'))
     patients : dict[str, Patient]
 
-bob_id = str(uuid4())
+bob_id = 'bob_smith'
 bob = Patient(facesheet=FaceSheet(id=bob_id,
                 name_first='Bob', 
                 name_last='Smith', 
@@ -91,23 +91,23 @@ bob = Patient(facesheet=FaceSheet(id=bob_id,
                 medications=['lisinopril']),
             backstory='A crochety 86 year old trumper',
             events=[
-                Event(tick=0, event_type='message_from_patient', subject='Establishing Care',
+                Event(simulation_week=0, event_type='message_from_patient', subject='Establishing Care',
                       short_description='Bob was told he needed a PCP and so he messaged acting for an appointment',
                       created_by='system',
                       visible_to_patient=True,
                       visible_to_user=True,
                       content='Uhh, hi. My wife says I need to start seeing a doctor. Can we make an appointment?'),
-                Event(tick=0, event_type='patient_visit', subject='Establishing Care',
+                Event(simulation_week=0, event_type='patient_visit', subject='Establishing Care',
                       short_description='Bob met with the doctor for the first time. He was started on lisinopril for his hypertension',
                       created_by='system',
                       visible_to_patient=True,
                       visible_to_user=True),
-                Event(tick=0, event_type='order_placed', subject='Lisinopril Rx',
+                Event(simulation_week=0, event_type='order_placed', subject='Lisinopril Rx',
                       short_description='The doctor wrote bob a prescription for lisinopril',
                       created_by='system',
                       visible_to_patient=True,
                       visible_to_user=True),
-                Event(tick=1, event_type='message_from_patient', subject='Refill Request',
+                Event(simulation_week=1, event_type='message_from_patient', subject='Refill Request',
                       short_description='Bob asked for a refill of his lisinopril, about a month late',
                       created_by='system',
                       visible_to_patient=True,
@@ -115,7 +115,7 @@ bob = Patient(facesheet=FaceSheet(id=bob_id,
                       content='Hey Doc, can I have a refill of my lisinopril?')
             ])
 
-alice_id = str(uuid4())
+alice_id = 'alice_johnson'
 alice = Patient(facesheet=FaceSheet(
     id=alice_id,
     name_first='Alice', 
@@ -126,17 +126,17 @@ alice = Patient(facesheet=FaceSheet(
     medications=[]),
     backstory='A sweet little 93 year old lady',
     events=[
-        Event(tick=0, event_type='patient_visit', subject='Urinary Symptoms',
+        Event(simulation_week=0, event_type='patient_visit', subject='Urinary Symptoms',
               short_description='Alice saw the doctor for some dysuria.',
               created_by='system',
               visible_to_patient=True,
               visible_to_user=True),
-        Event(tick=0, event_type='order_placed', subject='Urinalysis and CBC',
+        Event(simulation_week=0, event_type='order_placed', subject='Urinalysis and CBC',
               short_description='The doctor ordered a urinalysis and CBC',
               created_by='system',
               visible_to_patient=True,
               visible_to_user=True),
-        Event(tick=1, event_type='study_result', subject='Urinalysis Result',
+        Event(simulation_week=1, event_type='study_result', subject='Urinalysis Result',
               content='Urinalysis: 3+ Leukocyte esterase, 3+ Nitrites. WBC: 100/hpf',
               created_by='system',
               visible_to_patient=False,
@@ -144,7 +144,7 @@ alice = Patient(facesheet=FaceSheet(
     ])
             
 
-start_context = Context(current_tick=1, patients={bob_id : bob, alice_id : alice})
+start_context = Context(current_week=1, patients={bob_id : bob, alice_id : alice})
 
 # @function_tool
 # def get_patient_info(wrapper : RunContextWrapper[Context]) -> list[Patient]:
@@ -162,7 +162,7 @@ def get_patients_summary(wrapper : RunContextWrapper[Context]) -> list[FaceSheet
 
 @function_tool
 def get_new_messages_for_patient(wrapper : RunContextWrapper[Context], patient_id : str) -> str:
-    '''Gets the list of messages sent from/to the doctor from a given patient on this simulation tick'''
+    '''Gets the list of messages sent from/to the doctor from a given patient on this simulation week'''
     print('get_messages_for_patient')
 
     patient = wrapper.context.patients.get(patient_id)
@@ -172,7 +172,7 @@ def get_new_messages_for_patient(wrapper : RunContextWrapper[Context], patient_i
         return toret
     
     # If we found the patient, filter the patient's events only to "message_from_patient" or "message_to_patient"
-    events = [event for event in patient.events if event.event_type in ['message_from_patient', 'message_to_patient'] and event.tick == wrapper.context.current_tick]
+    events = [event for event in patient.events if event.event_type in ['message_from_patient', 'message_to_patient'] and event.simulation_week == wrapper.context.current_week]
     if not events or not len(events):
         toret = f'No messages found for patient {patient.facesheet.name_first} {patient.facesheet.name_last}'
         print(toret)
@@ -187,7 +187,7 @@ def send_patient_a_message(wrapper : RunContextWrapper[Context], patient_id: str
     '''Sends a message to a patient from the doctor
     
     Args: 
-        patient_id: The UUID of the patient to send the message to
+        patient_id: The string id of the patient to send the message to
         subject: The short subject of the message. If replying to a previous messsage, this should be the same subject as that message.
         message: The string message to send the patient
     '''
@@ -200,7 +200,7 @@ def send_patient_a_message(wrapper : RunContextWrapper[Context], patient_id: str
         print(toret)
         return toret
     
-    new_message = Event(tick=wrapper.context.current_tick, event_type='message_to_patient', subject=subject, content=message,
+    new_message = Event(simulation_week=wrapper.context.current_week, event_type='message_to_patient', subject=subject, content=message,
                         created_by='user', visible_to_patient=True, visible_to_user=True)
     print(f'Created message {new_message}')
     patient.events.append(new_message)
@@ -210,7 +210,7 @@ def send_patient_a_message(wrapper : RunContextWrapper[Context], patient_id: str
 
 @function_tool
 def get_new_results_for_patient(wrapper : RunContextWrapper[Context], patient_id : str) -> str:
-    '''Gets the list of new study results for a given patient on this simulation tick'''
+    '''Gets the list of new study results for a given patient on this simulation week'''
     print('get_new_results_for_patient')
 
     patient = wrapper.context.patients.get(patient_id)
@@ -220,7 +220,7 @@ def get_new_results_for_patient(wrapper : RunContextWrapper[Context], patient_id
         return toret
     
     # If we found the patient, filter the patient's events only to "study_result"
-    events = [event for event in patient.events if event.event_type == 'study_result' and event.tick == wrapper.context.current_tick]
+    events = [event for event in patient.events if event.event_type == 'study_result' and event.simulation_week == wrapper.context.current_week]
     if not events or not len(events):
         toret = f'No new study results found for patient {patient.facesheet.name_first} {patient.facesheet.name_last}'
         print(toret)
@@ -247,13 +247,68 @@ def place_order_for_patient(wrapper : RunContextWrapper[Context], patient_id : s
         print(toret)
         return toret
 
-    new_order = Event(tick=wrapper.context.current_tick, event_type='order_placed', subject=order_subject, content=order_description,
+    new_order = Event(simulation_week=wrapper.context.current_week, event_type='order_placed', subject=order_subject, content=order_description,
                       created_by='user', visible_to_patient=True, visible_to_user=True)
     patient.events.append(new_order)
     toret = f'Order placed for patient {patient.facesheet.name_first} {patient.facesheet.name_last}: "{order_description}"'
     print(toret)
     return toret
 
+
+@function_tool
+def patient_progression_add_event(wrapper : RunContextWrapper[Context], patient_id : str, event : Event):
+    '''Add a new event to a patient's record in order to progress the patient in the simulation. 
+    For the event "content" attribute, include a short, 1 sentence justification for you adding this event'''
+
+    print(f'patient_progression_add_event: patient_id={patient_id}, event={event}')
+    patient = wrapper.context.patients.get(patient_id)
+    if not patient:
+        toret = f'Error: No patient found with id {patient_id}'
+        print(toret)
+        return toret
+
+    patient.events.append(event)
+    toret = f'Event added to patient {patient.facesheet.name_first} {patient.facesheet.name_last}: "{event.content}"'
+    print(toret)
+    return toret
+
+patient_progression_agent_instructions = (
+'''You are an expert physician and medical educator who is managing an active simulation to teach medical students longitudinal patient care.
+
+You receive two items as input:
+- A current_week integer: This is the current time of the simulation. 
+- A patient record: This is a nested data structure containing patient demographics, problem lists, medication lists, and, most importantly, *events*.
+Your job is to progress the patient forward in time, based on their CURRENT problems, medications, and previous events. You do NOT provide any of your 
+own care. If a patient hasn't been adequately treated for something, it is NOT your job to correct the mistake. You PREDICT what happends *as a result of* the mistake.
+
+To do so, you think step-by-step:
+- First, you analyze the patient's current status and history, including their previous events
+- Second, you use your medical and educational expertise to formulate an advancement plan. 
+This plan is a list of events are events that *you* create. These events can be laboratory or imaging results, 
+patient portal messages sent from the patient to their doctor, consultant recommendations, or misecellaneous patient status updates, like the patient improving, or getting sicker, or needing to go to the ER. 
+You write these planned events down as a list. Remember - do NOT actually care for the patient. Just use your expertise to forecast what the patient would happen to the patient or what the patient would do in response given the current state. 
+- Finally, for each planned event in the list, you use tools to add them to the patient's record. If you are submitting a status update, you should decide if you need to
+send a message to the doctor from the patient letting the doctor know about the status update. 
+
+You must keep keep the simulation engaging and educational, but not overwhelming. Not every patient will need new events generated every week of the simulation. 
+'''
+)
+patient_progression_agent = Agent(
+    name='Patient Simulation Progression Agent',
+    instructions=patient_progression_agent_instructions,
+    tools=[patient_progression_add_event]
+)
+
+@function_tool
+async def end_clinic_day(wrapper : RunContextWrapper[Context]) -> str: 
+    '''Ends the clinic day and prepares to progress to the next time step in the simulation'''
+
+    print(f'end_clinic_day')
+    current_week = wrapper.context.current_week
+    next_week = current_week + 1
+    wrapper.context.current_week = next_week
+
+    progression_result = await Runner.run(patient_progression_agent, input=wrapper.context.model_dump_json(), context=wrapper.context)
 
 # medical_coder_agent_instructions = (
 # '''You are an expert medical coder and biller. You receive handoff from the Clinic Manager RN Agent, who
@@ -309,12 +364,19 @@ summarizer_agent = Agent(
 
 clinic_manager_agent_instructions = (
 '''You are the clinic manager. You are a wise and experienced RN. You are professional always.
+You are the main user interface for a longitudinal continuity clinic for medical students. 
 Your job is to respond to the user requests as best as possible, using the tools and context available to you. 
-You are helpful, but you don\'t suggest any medical information. '''
+You are helpful, but you don\'t suggest any specific medical information. '''
+
+# If the user requests to end the clinic day,
+# first generate a summary of their actions to this point. ALWAYS confirm that the user does not want to go back and make any more changes, and warn 
+# them that if they end the day, they won't be able to go back. If they confirm, end the day. 
+# '''
 )
 clinic_manager_agent = Agent(
     'Clinic Manager',
-    tools=[get_patients_summary, get_new_messages_for_patient, send_patient_a_message, get_new_results_for_patient, place_order_for_patient],  
+    tools=[get_patients_summary, get_new_messages_for_patient, send_patient_a_message, 
+           get_new_results_for_patient, place_order_for_patient, end_clinic_day],  
     instructions=clinic_manager_agent_instructions,
     handoffs=[summarizer_agent]
     # handoffs=[handoff_obj_medical_coder_agent]
@@ -331,6 +393,8 @@ if 'context' not in st.session_state:
 # And the ChatGPT agent conversation history
 if 'agent_history' not in st.session_state:
     st.session_state['agent_history'] = []
+if 'day_ended' not in st.session_state:
+    st.session_state['day_ended'] = False 
 
 # c1, c2 = st.columns([3,1])
 summary_response = ''
@@ -359,6 +423,11 @@ if user_input: # if the user has typed something in
 
     # Add it to the agent's conversation history
     st.session_state['agent_history'] += (response.to_input_list())
+
+    # Check if the user ended the day
+    if st.session_state['day_ended']:
+        st.success('The clinic day has ended. Please restart the app to begin a new day!')
+        st.balloons()
 
 
 # with c2:
