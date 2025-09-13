@@ -520,24 +520,22 @@ if 'context' not in st.session_state:
 # And the ChatGPT agent conversation history
 if 'event_log' not in st.session_state:
     st.session_state['event_log'] = []
+if 'placeholder_text' not in st.session_state:
+    st.session_state['placeholder_text'] = asyncio.run(Runner.run(clinic_manager_agent, input=st.session_state['agent_history'] + [{'role': 'user', 'content': 'Give me a short, few-word suggestion of what to ask you next. End your suggestion with ...'}])).final_output
 
-# c1, c2 = st.columns(2)
 
-# with c2:
-# st.header(f'Week {st.session_state["context"].current_week}')
-# to_write = '\n'.join([f'- {ev}' for ev in st.session_state['event_log']])
-# print(to_write)
-# st.markdown(to_write)
-# # st.write(st.session_state['event_log'])
+st.set_page_config(page_title='Virtual Clinic', page_icon='🥼', layout='wide', initial_sidebar_state='auto')
 
-# with c1:
-#     with st.container(height=600):
-        # Display the conversation history
-
-st.navigation(['app.py','test.py'], position='top')
 st.write('🥼 **Virtual Clinic**')
-st.caption('AI agents to drive a long-term, dynamic simulation of patient care.')
+st.caption('AI agents to drive a long-term, dynamic simulation of patient care. Make sure to check out the sidebar on the left to see how the simulation evolves patients over time.',)
+
+
+print('placeholder_text', st.session_state['placeholder_text'])
+# user_input = st.chat_input(placeholder='banana')
+# user_input = st.chat_input(placeholder=st.session_state['placeholder_text'], key='user_input')
 user_input = st.chat_input()
+
+print('user_input', user_input)
 with st.container(border=True):
     for role, message in st.session_state['history']:
         with st.chat_message(name=role):
@@ -570,38 +568,44 @@ with st.container(border=True):
         if st.session_state['context'].current_week != current_week:
             del st.session_state['agent_history']
             del st.session_state['history']
+            del st.session_state['placeholder_text']
             st.balloons()
             end_of_day_placeholder.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
 
-# with event_log_tab:
-#     st.caption('This helps you understand what the simulation is doing, so you can peek behind the scenes. It keeps track of all of the events initiated by the system and the user. ')
-    
-#     for patient in st.session_state['context'].patients.values():
-#         st.subheader(f'Patient: {patient.facesheet.name_first} {patient.facesheet.name_last}')
-#         for event in patient.events:
-#                 badge_col, text_col = st.columns([1,15])
-#                 with badge_col:
-#                     if event.created_by == 'user':
-#                         st.badge('User', color='green')
-#                     else:
-#                         st.badge('AI', color='blue')
-#                 with text_col:
-#                     st.write(f'Week {event.simulation_week}: {event.subject}')
-#                     if event.content:
-#                         st.write(f'- {event.content}')
 
+with st.sidebar:
+    event_log_tab, help_tab = st.tabs(['📋 Event Log', '❔ Help'])
+    with event_log_tab:
+        st.header('📋 Event Log')
+        st.caption('This helps you understand what the simulation is doing, so you can peek behind the scenes. It keeps track of all of the events initiated by the system and the user. ')
+        sel_pt_id = st.selectbox('Select Patient', options=list(st.session_state['context'].patients.keys()), format_func=lambda x: f'{st.session_state["context"].patients[x].facesheet.name_first} {st.session_state["context"].patients[x].facesheet.name_last}')
+        patient = st.session_state['context'].patients.get(sel_pt_id)
+        if patient:
+            st.subheader(f'Patient: {patient.facesheet.name_first} {patient.facesheet.name_last}')
+            for event in patient.events:
+                    badge_col, text_col = st.columns([1,10])
+                    with badge_col:
+                        if event.created_by == 'user':
+                            st.badge('User', color='green')
+                        else:
+                            st.badge('AI', color='blue')
+                    with text_col:
+                        st.write(f'Week {event.simulation_week}: {event.subject}')
+                        if event.content:
+                            st.write(f'- {event.content}')
+    with help_tab:
+        about_this_simulation = (
+        '''
+# About This Simulation
 
-# about_this_simulation = (
-# '''This is a simulated virtual clinic which employs AI agents to simulate patient evolution over time. You play as a physician who has a panel
-# of patients. These patients can grow and change over time in response to your actions. Like in real life, you can look up your patients,
-# examine their histories, correspond with them via portal messages, and prescribe them medications or consults. At the end of your "clinic day"
-# an AI agent will use your actions and the patient's histories and progress the simulation, creating new encounters, problems, and emergent behavior over time
+This is a simulated virtual clinic which employs AI agents to simulate patient evolution over time. You play as a physician who has a panel
+of patients. These patients can grow and change over time in response to your actions. Like in real life, you can look up your patients,
+examine their histories, correspond with them via portal messages, and prescribe them medications or consults. At the end of your "clinic day"
+an AI agent will use your actions and the patient's histories and progress the simulation, creating new encounters, problems, and emergent behavior over time
 
-# In this relatively simple example, there are only a few patients. However, it serves as a proof of concept to show how dynamic agent-based simulations can run semi-autonomously. 
-# **Make sure to check the Event Log to see how the simulation unfolds!**
+In this relatively simple example, there are only a few patients. However, it serves as a proof of concept to show how dynamic agent-based simulations can run semi-autonomously. 
+**Make sure to check the Event Log to see how the simulation unfolds!**
 
-# If you have questions, reach out to maxspad@med.umich.edu. Thanks!'''
-# )
-# with help_tab:
-#     st.header('About This Simulation')
-#     st.write(about_this_simulation)
+If you have questions, reach out to maxspad@med.umich.edu. Thanks!'''
+        )
+        st.markdown(about_this_simulation)  
