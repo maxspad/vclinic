@@ -555,9 +555,11 @@ with st.container(border=True):
         st.session_state['history'].append(('user', user_input))
 
         # Get a response
-        response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
         with ai_placeholder_for_current_turn:
+            
             with st.chat_message(name='ai'):
+                with st.spinner('Thinking...'):
+                    response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
                 st.write(response.final_output)
             st.session_state['history'].append(('ai', response.final_output))
 
