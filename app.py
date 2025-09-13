@@ -484,11 +484,11 @@ summarizer_agent = Agent(
 clinic_manager_agent_instructions = (
 '''You are the clinic manager. You are a wise and experienced RN. You are professional always, but not above the very occasional banter (though you don't talk about your lighter side)
 You are the main user interface for the physician managing a longitudinal continuity clinic.
-You try to use bullet points when appropriate to keep things clear and concise. Use bolding, italicizing, underlining, etc in order to make the information clear and easy to read.
+Use markdown bolding, italicizing, underlining, and bullets, etc in order to make the information clear and easy to read.
 
 Your job is to respond to the user requests as best as possible, using the tools and context available to you. 
 Make sure to let the user know that when they are finished with the clinic day, they can let you know in order to progress forward in time. 
-You are helpful, but you don\'t suggest any specific medical information.
+You are helpful, but you don't suggest any specific medical information.
 
 If the user requests to end the clinic day,
 first generate a summary of their actions to this point. ALWAYS confirm that the user does not want to go back and make any more changes, and warn 
@@ -511,7 +511,7 @@ clinic_manager_agent = Agent(
 if 'agent_history' not in st.session_state:
     st.session_state['agent_history'] = []
 if 'history' not in st.session_state:
-    intro_result = asyncio.run(Runner.run(clinic_manager_agent, input='Introduce yourself and write very brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message. Give the user a suggestion where to start.', context=start_context))
+    intro_result = asyncio.run(Runner.run(clinic_manager_agent, input='Very briefly introduce yourself and write very brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message. Give the user a suggestion where to start.', context=start_context))
     st.session_state['agent_history'] += intro_result.to_input_list()
     st.session_state['history'] = [('ai', intro_result.final_output)]
 # Likewise set up the context
@@ -533,75 +533,75 @@ if 'event_log' not in st.session_state:
 # with c1:
 #     with st.container(height=600):
         # Display the conversation history
-st.subheader('🥼 Virtual Clinic')
-st.caption('Using AI agents to drive a long-term, dynamic simulation of patient care.')
-chat_tab, event_log_tab, help_tab = st.tabs(['💬 Chat', '📋 Event Log', '❔ Help'])
-with chat_tab:
-    with st.container(height=500):
-        for role, message in st.session_state['history']:
-            with st.chat_message(name=role):
-                st.caption(f'{"Clinic Manager" if role == "ai" else "User"} - Week {st.session_state["context"].current_week}')
-                st.write(message)
-        user_placeholder_for_current_turn = st.empty()
-        ai_placeholder_for_current_turn = st.empty()
-        end_of_day_placeholder = st.empty()
-        user_input = st.chat_input()
-        current_week = st.session_state['context'].current_week
 
-        if user_input: # if the user has typed something in 
-            # Echo the user's input
-            with user_placeholder_for_current_turn:
-                with st.chat_message(name='user'):
-                    st.write(user_input)
-            # Store it in the session output
-            st.session_state['history'].append(('user', user_input))
+st.navigation(['app.py','test.py'], position='top')
+st.write('🥼 **Virtual Clinic**')
+st.caption('AI agents to drive a long-term, dynamic simulation of patient care.')
+user_input = st.chat_input()
+with st.container(border=True):
+    for role, message in st.session_state['history']:
+        with st.chat_message(name=role):
+            st.caption(f'{"Clinic Manager" if role == "ai" else "User"} - Week {st.session_state["context"].current_week}')
+            st.write(message)
+    user_placeholder_for_current_turn = st.empty()
+    ai_placeholder_for_current_turn = st.empty()
+    end_of_day_placeholder = st.empty()
+    current_week = st.session_state['context'].current_week
 
-            # Get a response
-            response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
-            with ai_placeholder_for_current_turn:
-                with st.chat_message(name='ai'):
-                    st.write(response.final_output)
-                st.session_state['history'].append(('ai', response.final_output))
+    if user_input: # if the user has typed something in 
+        # Echo the user's input
+        with user_placeholder_for_current_turn:
+            with st.chat_message(name='user'):
+                st.write(user_input)
+        # Store it in the session output
+        st.session_state['history'].append(('user', user_input))
 
-            # Add it to the agent's conversation history
-            st.session_state['agent_history'] += (response.to_input_list())
+        # Get a response
+        response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
+        with ai_placeholder_for_current_turn:
+            with st.chat_message(name='ai'):
+                st.write(response.final_output)
+            st.session_state['history'].append(('ai', response.final_output))
 
-            # Check if the user ended the day
-            if st.session_state['context'].current_week != current_week:
-                del st.session_state['agent_history']
-                del st.session_state['history']
-                st.balloons()
-                end_of_day_placeholder.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
+        # Add it to the agent's conversation history
+        st.session_state['agent_history'] += (response.to_input_list())
 
-with event_log_tab:
-    st.caption('This helps you understand what the simulation is doing, so you can peek behind the scenes. It keeps track of all of the events initiated by the system and the user. ')
+        # Check if the user ended the day
+        if st.session_state['context'].current_week != current_week:
+            del st.session_state['agent_history']
+            del st.session_state['history']
+            st.balloons()
+            end_of_day_placeholder.success(f'Clinic day ended. It is now week {st.session_state["context"].current_week} of the simulation.')
+
+# with event_log_tab:
+#     st.caption('This helps you understand what the simulation is doing, so you can peek behind the scenes. It keeps track of all of the events initiated by the system and the user. ')
     
-    for patient in st.session_state['context'].patients.values():
-        st.subheader(f'Patient: {patient.facesheet.name_first} {patient.facesheet.name_last}')
-        for event in patient.events:
-                badge_col, text_col = st.columns([1,15])
-                with badge_col:
-                    if event.created_by == 'user':
-                        st.badge('User', color='green')
-                    else:
-                        st.badge('AI', color='blue')
-                with text_col:
-                    st.write(f'Week {event.simulation_week}: {event.subject}')
-                    if event.content:
-                        st.write(f'- {event.content}')
+#     for patient in st.session_state['context'].patients.values():
+#         st.subheader(f'Patient: {patient.facesheet.name_first} {patient.facesheet.name_last}')
+#         for event in patient.events:
+#                 badge_col, text_col = st.columns([1,15])
+#                 with badge_col:
+#                     if event.created_by == 'user':
+#                         st.badge('User', color='green')
+#                     else:
+#                         st.badge('AI', color='blue')
+#                 with text_col:
+#                     st.write(f'Week {event.simulation_week}: {event.subject}')
+#                     if event.content:
+#                         st.write(f'- {event.content}')
 
 
-about_this_simulation = (
-'''This is a simulated virtual clinic which employs AI agents to simulate patient evolution over time. You play as a physician who has a panel
-of patients. These patients can grow and change over time in response to your actions. Like in real life, you can look up your patients,
-examine their histories, correspond with them via portal messages, and prescribe them medications or consults. At the end of your "clinic day"
-an AI agent will use your actions and the patient's histories and progress the simulation, creating new encounters, problems, and emergent behavior over time
+# about_this_simulation = (
+# '''This is a simulated virtual clinic which employs AI agents to simulate patient evolution over time. You play as a physician who has a panel
+# of patients. These patients can grow and change over time in response to your actions. Like in real life, you can look up your patients,
+# examine their histories, correspond with them via portal messages, and prescribe them medications or consults. At the end of your "clinic day"
+# an AI agent will use your actions and the patient's histories and progress the simulation, creating new encounters, problems, and emergent behavior over time
 
-In this relatively simple example, there are only a few patients. However, it serves as a proof of concept to show how dynamic agent-based simulations can run semi-autonomously. 
-**Make sure to check the Event Log to see how the simulation unfolds!**
+# In this relatively simple example, there are only a few patients. However, it serves as a proof of concept to show how dynamic agent-based simulations can run semi-autonomously. 
+# **Make sure to check the Event Log to see how the simulation unfolds!**
 
-If you have questions, reach out to maxspad@med.umich.edu. Thanks!'''
-)
-with help_tab:
-    st.header('About This Simulation')
-    st.write(about_this_simulation)
+# If you have questions, reach out to maxspad@med.umich.edu. Thanks!'''
+# )
+# with help_tab:
+#     st.header('About This Simulation')
+#     st.write(about_this_simulation)
