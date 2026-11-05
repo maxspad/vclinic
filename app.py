@@ -48,6 +48,18 @@ set_default_openai_client(openai_client, use_for_tracing=False)
 set_default_openai_api(OPENAI_API_MODE)
 set_tracing_disabled(disabled=TRACING_DISABLED)
 
+
+def run_agent(*args, **kwargs):
+    """Run an agent to completion on this session's long-lived event loop.
+
+    Don't use asyncio.run() here: it creates and closes a new loop on every call,
+    but the OpenAI client keeps pooled HTTP connections bound to the loop that
+    opened them, so the next call fails with "RuntimeError: Event loop is closed".
+    """
+    if 'event_loop' not in st.session_state:
+        st.session_state['event_loop'] = asyncio.new_event_loop()
+    return st.session_state['event_loop'].run_until_complete(Runner.run(*args, **kwargs))
+
 class Actor(BaseModel):
     pass
 
@@ -531,7 +543,7 @@ clinic_manager_agent = Agent(
 if 'agent_history' not in st.session_state:
     st.session_state['agent_history'] = []
 if 'history' not in st.session_state:
-    intro_result = asyncio.run(Runner.run(clinic_manager_agent, input='Very briefly introduce yourself and write very brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message. Give the user a suggestion where to start.', context=start_context))
+    intro_result = run_agent(clinic_manager_agent, input='Very briefly introduce yourself and write very brief overview of your cababilities. No need to say "Sure!" or "Okay!" in response to this message. Give the user a suggestion where to start.', context=start_context)
     st.session_state['agent_history'] += intro_result.to_input_list()
     st.session_state['history'] = [('ai', intro_result.final_output)]
 # Likewise set up the context
@@ -541,7 +553,7 @@ if 'context' not in st.session_state:
 if 'event_log' not in st.session_state:
     st.session_state['event_log'] = []
 if 'placeholder_text' not in st.session_state:
-    st.session_state['placeholder_text'] = asyncio.run(Runner.run(clinic_manager_agent, input=st.session_state['agent_history'] + [{'role': 'user', 'content': 'Give me a short, few-word suggestion of what to ask you next. End your suggestion with ...'}])).final_output
+    st.session_state['placeholder_text'] = run_agent(clinic_manager_agent, input=st.session_state['agent_history'] + [{'role': 'user', 'content': 'Give me a short, few-word suggestion of what to ask you next. End your suggestion with ...'}]).final_output
 
 
 st.write('🥼 **Virtual Clinic**')
@@ -577,7 +589,7 @@ with st.container(border=True):
             
             with st.chat_message(name='ai'):
                 with st.spinner('Thinking...'):
-                    response = asyncio.run(Runner.run(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context']))
+                    response = run_agent(clinic_manager_agent, st.session_state['agent_history'] + [{'role': 'user', 'content': user_input}], context=st.session_state['context'])
                 st.write(response.final_output)
             st.session_state['history'].append(('ai', response.final_output))
 
