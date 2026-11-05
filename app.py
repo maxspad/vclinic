@@ -3,33 +3,50 @@ from uuid import UUID, uuid1, uuid4
 from pydantic import BaseModel, Field
 from rich import print
 from typing import Literal, Optional
-from openai import AzureOpenAI, AsyncAzureOpenAI
+from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
-from agents import ModelSettings, RunContextWrapper, set_default_openai_api, set_default_openai_client, Agent, Runner, set_tracing_disabled, function_tool, handoff, set_tracing_export_api_key
+from agents import ModelSettings, RunContextWrapper, set_default_openai_api, set_default_openai_client, Agent, Runner, set_tracing_disabled, function_tool, handoff
 from dotenv import load_dotenv
 import os
 import asyncio
 
-# Load environment variables
-# load_dotenv()
-print("AZURE_OPENAI_API_KEY:", os.getenv("AZURE_OPENAI_API_KEY"))
-print("AZURE_OPENAI_API_VERSION:", os.getenv("AZURE_OPENAI_API_VERSION"))
-print("AZURE_OPENAI_ENDPOINT:", os.getenv("AZURE_OPENAI_ENDPOINT"))
-print("AZURE_OPENAI_DEPLOYMENT:", os.getenv("AZURE_OPENAI_DEPLOYMENT"))
-print("AZURE_OPENAI_ORG_ID:", os.getenv("AZURE_OPENAI_ORG_ID"))
-print("OPENAI_API_KEY:", os.getenv("OPENAI_API_KEY"))
-# Create OpenAI client using Azure OpenAI
-openai_client = AsyncAzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
-    organization=os.getenv("AZURE_OPENAI_ORG_ID")
+st.set_page_config(page_title='Virtual Clinic', page_icon='🥼', layout='wide', initial_sidebar_state='auto')
+
+# Load environment variables from a local .env file. This is a no-op when deployed
+# with Streamlit secrets, which are already exposed as environment variables.
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# Only needed if the institution fronts OpenAI with its own v1-compatible gateway.
+OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL')
+OPENAI_ORG_ID = os.getenv('OPENAI_ORG_ID')
+OPENAI_PROJECT = os.getenv('OPENAI_PROJECT')
+OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4.1')
+# 'chat_completions' or 'responses'. Chat completions is the most broadly supported.
+OPENAI_API_MODE = os.getenv('OPENAI_API_MODE', 'chat_completions')
+# Tracing is off by default: traces would be exported to platform.openai.com,
+# which we don't want for simulated patient content.
+TRACING_DISABLED = os.getenv('OPENAI_TRACING_DISABLED', 'true').strip().lower() in ('1', 'true', 'yes')
+
+if not OPENAI_API_KEY:
+    st.error('`OPENAI_API_KEY` is not set. Copy `.env.example` to `.env` and add your key, '
+             'or set it in `.streamlit/secrets.toml`.')
+    st.stop()
+if OPENAI_API_MODE not in ('chat_completions', 'responses'):
+    st.error(f'`OPENAI_API_MODE` must be "chat_completions" or "responses", got "{OPENAI_API_MODE}".')
+    st.stop()
+
+# Create the OpenAI client. base_url/organization/project are left as None when unset
+# so the SDK falls back to its own defaults (https://api.openai.com/v1).
+openai_client = AsyncOpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL,
+    organization=OPENAI_ORG_ID,
+    project=OPENAI_PROJECT,
 )
-set_tracing_export_api_key(os.getenv("OPENAI_API_KEY"))
 set_default_openai_client(openai_client, use_for_tracing=False)
-set_default_openai_api('chat_completions')
-set_tracing_disabled(disabled=False)
+set_default_openai_api(OPENAI_API_MODE)
+set_tracing_disabled(disabled=TRACING_DISABLED)
 
 class Actor(BaseModel):
     pass
@@ -415,6 +432,7 @@ patient_progression_agent = Agent(
     name='Patient Simulation Progression Agent',
     instructions=patient_progression_agent_instructions,
     tools=[patient_progression_add_event],
+    model=OPENAI_MODEL,
     # model_settings=ModelSettings(reasoning=Reasoning(effort='high'), verbosity='medium')
 )
 
@@ -477,7 +495,8 @@ format it using markdown as follows:
 )
 summarizer_agent = Agent(
     'Summarizer',
-    instructions=summarizer_agent_instructions
+    instructions=summarizer_agent_instructions,
+    model=OPENAI_MODEL,
 )
 
 
@@ -503,6 +522,7 @@ clinic_manager_agent = Agent(
            get_results_for_patient, place_order_for_patient, end_clinic_day],  
     instructions=clinic_manager_agent_instructions,
     handoffs=[summarizer_agent],
+    model=OPENAI_MODEL,
     # model_settings=ModelSettings(reasoning=Reasoning(effort='low'), verbosity='medium')
     # handoffs=[handoff_obj_medical_coder_agent]
 )
@@ -523,8 +543,6 @@ if 'event_log' not in st.session_state:
 if 'placeholder_text' not in st.session_state:
     st.session_state['placeholder_text'] = asyncio.run(Runner.run(clinic_manager_agent, input=st.session_state['agent_history'] + [{'role': 'user', 'content': 'Give me a short, few-word suggestion of what to ask you next. End your suggestion with ...'}])).final_output
 
-
-st.set_page_config(page_title='Virtual Clinic', page_icon='🥼', layout='wide', initial_sidebar_state='auto')
 
 st.write('🥼 **Virtual Clinic**')
 st.caption('AI agents to drive a long-term, dynamic simulation of patient care. Make sure to check out the sidebar on the left to see how the simulation evolves patients over time.',)
